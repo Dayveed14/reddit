@@ -146,7 +146,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@$EC2_IP "
             cd /home/ubuntu/api && \
             npm install --production && \
-            (pm2 describe api > /dev/null && pm2 restart api || pm2 start index.js --name 'api')
+            (pm2 describe api > /dev/null && pm2 restart api || pm2 start server.js --name 'api')
           "
           
           # Clean up key file
