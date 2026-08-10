@@ -26,6 +26,12 @@ jobs:
           npm ci
 
       - name: Run Jest Tests
+        env:
+          MONGO_URI: mongodb://localhost:27017/test
+          JWT_SECRET: test-secret-key
+          CLOUDINARY_API_SECRET_KEY: test-cloudinary-secret
+          CLOUDINARY_API_KEY: test-cloudinary-key
+          CLOUDINARY_CLOUD_NAME: test-cloudinary-cloud
         run: |
           npm test
 
