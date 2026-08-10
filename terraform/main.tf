@@ -7,12 +7,12 @@ terraform {
     }
   }
   # Uncomment the section below to configure an S3 backend for shared state in production
-  # backend "s3" {
-  #   bucket         = "YOUR_TERRAFORM_STATE_BUCKET_NAME"
-  #   key            = "api-deploy/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "redditbackend"
+    key            = "api-deploy/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
