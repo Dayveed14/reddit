@@ -41,7 +41,8 @@ app.use(express.json());
 
 const allowedOrigins = [
     'http://localhost:5173', // Your local React development URL
-    'https://reddit-clone-ten.vercel.app' // Your Vercel production URL
+    'https://reddit-clone-ten.vercel.app', // Your Vercel production URL
+    'http://100.61.180.15'
 ];
 
 app.use(cors({

@@ -53,6 +53,14 @@ resource "aws_security_group" "api_sg" {
     description = "Allow SSH access from anywhere"
   }
 
+# HTTP Access
+    ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # Node API Access
   ingress {
     from_port   = 7000
