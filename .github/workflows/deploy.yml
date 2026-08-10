@@ -141,12 +141,27 @@ jobs:
             --exclude 'terraform' \
             --exclude '.env' \
             ./ ubuntu@$EC2_IP:/home/ubuntu/api/
+
+            # 3. Create production .env on EC2
+
+            ssh -o StrictHostKeyChecking=no \
+            -i ec2_key.pem \
+            ubuntu@$EC2_IP \
+            "cat > /home/ubuntu/api/.env <<'EOF'
+          NODE_ENV=production
+          NODE_PORT=7000
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          CLOUDINARY_API_SECRET_KEY=${{ secrets.CLOUDINARY_API_SECRET_KEY }}
+          CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          EOF"
           
           # 3. Install production dependencies and reload/start the application using PM2
           ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@$EC2_IP "
             cd /home/ubuntu/api && \
             npm install --production && \
-            (pm2 describe api > /dev/null && pm2 restart api || pm2 start server.js --name 'api')
+            (pm2 describe api > /dev/null && pm2 restart api --update-env || pm2 start server.js --name 'api')
           "
           
           # Clean up key file
