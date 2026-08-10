@@ -114,10 +114,12 @@ async function startServer() {
 // Only auto-connect/listen when this file is run directly (e.g. `node server.js`).
 // When imported (e.g. by tests via `import { app } from './server.js'`), the caller
 // is responsible for connecting to a database and/or starting the listener.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// if (import.meta.url === `file://${process.argv[1]}`) {
+//     startServer();
+// }
+if (env.nodeEnv !== 'test') {
     startServer();
 }
-
 
 async function gracefulShutdown(signal) {
     console.log(`\n Signal: ${signal}. Cleaning up....`)
