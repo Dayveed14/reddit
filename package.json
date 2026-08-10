@@ -1,0 +1,33 @@
+{
+  "name": "reddit-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test jest"
+  },
+  "keywords": [],
+  "author": "dev_josh",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.7.3",
+    "morgan": "^1.11.0",
+    "multer": "^2.2.0",
+    "multer-storage-cloudinary": "^4.0.0",
+    "nanoid": "^5.1.16"
+  },
+  "devDependencies": {
+    "@types/morgan": "^1.9.10",
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
+  }
+}

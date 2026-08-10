@@ -1,0 +1,147 @@
+name: Test and Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Run Jest Tests
+        run: |
+          npm test
+
+  deploy:
+    name: Provision and Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Here it downloads the full Git history. Needed to accurately track file changes
+
+      - name: Check for Terraform Changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Check if EC2 Instance Exists
+        id: check_ec2
+        run: |
+          INSTANCE_IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=my-node-api-instance" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text 2>/dev/null || echo "") 
+          # Ask AWS for the running instance named my-node-api-instance. If found, store its public IP. If not found (or an error occurs), store an empty string.
+          if [ -z "$INSTANCE_IP" ] || [ "$INSTANCE_IP" = "None" ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Instance does not exist in AWS."
+          else
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+            echo "Instance exists with IP: $INSTANCE_IP"
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Run Terraform Apply
+        if: steps.check_ec2.outputs.exists == 'false' || steps.filter.outputs.terraform == 'true' || github.event_name == 'workflow_dispatch'
+        id: terraform
+        run: |
+          cd terraform
+          terraform init
+          
+          # Generate public key from the private key secret
+          echo "${{ secrets.EC2_SSH_KEY }}" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          SSH_PUBLIC_KEY=$(ssh-keygen -y -f ec2_key.pem)
+          rm ec2_key.pem
+          
+          terraform apply -auto-approve -var="ssh_public_key=$SSH_PUBLIC_KEY" -var="aws_region=${{ secrets.AWS_REGION }}"
+
+      - name: Determine Deployment IP
+        id: deploy_ip
+        run: |
+          if [ "${{ steps.check_ec2.outputs.exists }}" = "false" ] || [ "${{ steps.filter.outputs.terraform }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            cd terraform
+            EC2_IP=$(terraform output -raw ec2_public_ip)
+            cd ..
+          else
+            EC2_IP="${{ steps.check_ec2.outputs.ip }}"
+          fi
+          echo "ip=$EC2_IP" >> $GITHUB_OUTPUT
+          echo "Deployment Target IP: $EC2_IP"
+
+      - name: Deploy Code via SSH and PM2
+        run: |
+          # Write SSH private key to file
+          echo "${{ secrets.EC2_SSH_KEY }}" > ec2_key.pem
+          chmod 600 ec2_key.pem
+          
+          EC2_IP="${{ steps.deploy_ip.outputs.ip }}"
+          
+          # 1. Wait for User Data configuration to finish (Node.js & PM2 installation)
+          echo "Waiting for EC2 instance bootstrap (Node.js & PM2) to complete..."
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@$EC2_IP "command -v pm2 &>/dev/null"; then
+              echo "PM2 is ready on the EC2 instance!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Timeout waiting for PM2 setup."
+              exit 1
+            fi
+            echo "Waiting for PM2 setup to finish ($i/30)..."
+            sleep 10
+          done
+          
+          # 2. Sync application folder to remote instance (excluding local node_modules, git, github and terraform files)
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ec2_key.pem" \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'terraform' \
+            --exclude '.env' \
+            ./ ubuntu@$EC2_IP:/home/ubuntu/api/
+          
+          # 3. Install production dependencies and reload/start the application using PM2
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem ubuntu@$EC2_IP "
+            cd /home/ubuntu/api && \
+            npm install --production && \
+            (pm2 describe api > /dev/null && pm2 restart api || pm2 start index.js --name 'api')
+          "
+          
+          # Clean up key file
+          rm ec2_key.pem
